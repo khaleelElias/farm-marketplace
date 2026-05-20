@@ -211,39 +211,58 @@ CREATE TABLE farm_applications (
 
 ## API — Edge Functions
 
-All functions live in `supabase/functions/`. Base URL: `https://<project>.supabase.co/functions/v1/`
+**5 Edge Functions total.** Each function contains an internal Hono router and handles
+multiple routes. All live in `supabase/functions/`. Base URL: `https://<project>.supabase.co/functions/v1/`
 
-### Public (no auth required)
+```
+supabase/functions/
+├── _shared/
+│   ├── auth.ts        # requireAuth helper — JWT validation + role check
+│   ├── client.ts      # Supabase admin client (service_role)
+│   └── errors.ts      # ApiError class + error response helpers
+├── farms/             # Public farm discovery
+│   └── index.ts
+├── me/                # Consumer saved farms
+│   └── index.ts
+├── farmer/            # Farmer management (farm, products, photos)
+│   └── index.ts
+├── admin/             # Admin operations (applications, moderation, analytics)
+│   └── index.ts
+└── auth-hook/         # Supabase DB webhook — creates profiles row on signup
+    └── index.ts
+```
+
+### Function: `farms` — Public (no auth required)
 | Method | Path | Description |
 |---|---|---|
 | GET | `/farms` | List approved farms. Query: `lat`, `lng`, `radius_km`, `category`, `limit`, `offset` |
 | GET | `/farms/:id` | Get farm detail (profile, hours, products, photos, payments) |
 
-### Consumer (any authenticated user)
+### Function: `me` — Consumer (any authenticated user)
 | Method | Path | Description |
 |---|---|---|
 | GET | `/me/saved-farms` | List saved farms |
 | PUT | `/me/saved-farms/:farmId` | Save a farm |
 | DELETE | `/me/saved-farms/:farmId` | Unsave a farm |
 
-### Farmer (role = `farmer`, farm status = `approved`)
+### Function: `farmer` — Farmer (role = `farmer`)
 | Method | Path | Description |
 |---|---|---|
-| POST | `/farmer/apply` | Submit farm application |
+| POST | `/farmer/apply` | Submit farm application (pre-approval, any auth user) |
 | GET | `/farmer/farm` | Get own farm data |
 | PATCH | `/farmer/farm` | Update farm (name, description, address, contact, hours, payments, is_closed) |
 | POST | `/farmer/products` | Add product |
 | PATCH | `/farmer/products/:id` | Update product |
 | DELETE | `/farmer/products/:id` | Delete product |
 | PATCH | `/farmer/products/:id/stock` | Toggle in_stock |
-| POST | `/farmer/photos` | Upload photo (multipart/form-data) |
+| POST | `/farmer/photos` | Upload photo (multipart/form-data → Supabase Storage) |
 | DELETE | `/farmer/photos/:id` | Delete photo |
 
-### Admin (role = `admin`)
+### Function: `admin` — Admin (role = `admin`)
 | Method | Path | Description |
 |---|---|---|
 | GET | `/admin/applications` | List applications (filterable by status) |
-| POST | `/admin/applications/:id/approve` | Approve farm (sets status + profile.role = 'farmer') |
+| POST | `/admin/applications/:id/approve` | Approve farm — sets `farms.status = approved`, `profiles.role = farmer` |
 | POST | `/admin/applications/:id/reject` | Reject farm |
 | GET | `/admin/farms` | List all farms |
 | PATCH | `/admin/farms/:id` | Edit or suspend farm |
@@ -251,6 +270,10 @@ All functions live in `supabase/functions/`. Base URL: `https://<project>.supaba
 | GET | `/admin/users` | List all users |
 | POST | `/admin/users/:id/ban` | Ban user |
 | GET | `/admin/analytics` | Platform stats |
+
+### Function: `auth-hook` — Internal Supabase trigger
+Fires on every new `auth.users` insert. Creates the corresponding `profiles` row
+with `role = 'consumer'`. Not called by clients directly.
 
 ---
 
